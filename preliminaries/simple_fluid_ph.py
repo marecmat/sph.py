@@ -1,6 +1,17 @@
 from dataclasses import dataclass
-import numpy as np 
+import numpy as np
 from scipy.spatial import cKDTree
+import matplotlib.pyplot as plt
+import sys
+
+sys.path.append("../src/")
+import kernels
+from ghost_particles_1Dlattice import make_ghosts
+from time_integration import symplectic_step, integrate
+from matplotlib import rcParams
+rcParams['text.usetex'] = True
+
+
 
 
 # core code format 
