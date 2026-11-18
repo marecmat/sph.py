@@ -1,13 +1,15 @@
 from dataclasses import dataclass
+
 import numpy as np
 from scipy.spatial import cKDTree
 import matplotlib.pyplot as plt
-import sys
 
+import sys
 sys.path.append("../src/")
 import kernels
 from ghost_particles_1Dlattice import make_ghosts
 from time_integration import symplectic_step, integrate
+
 from matplotlib import rcParams
 rcParams['text.usetex'] = True
 
@@ -36,7 +38,12 @@ class parameters():
     g: float = 9.81         # gravity acceleration
     drho_max: float = .01   # max admissible density variation  (WCSPH)
     gamma: float = 7        # isentropic expansion factor TODO: not sure why
-    alpha: float = .01      # artificial viscosity parameter TODO: verify why
+    alpha: float = .01      # artificial viscosity parameter
+    delta: float = .1       # density diffusion coefficient
+
+    cfl: float = .25
+    start: float = 'hydrostatic' # particle profile
+                                # ['uniform', 'hydrostatic']
 
     @property       # particle spacing
     def dy(self):   return self.H/self.N
@@ -49,6 +56,13 @@ class parameters():
     @property
     def mass(self): return self.rho0*self.dy
 
+    @property       # effective viscosity
+    def nu(self): return self.alpha*self.h*self.c0/6
+
+    @property
+    def dt(self):
+        return self.cfl * min([self.h/self.c0, self.h**2 / self.nu])
+
 
 def W(r, h):
     # Wendland C2
@@ -60,22 +74,22 @@ def dWdr(r, h):
     return np.where(q < 2.0, 3./(4.*h)*(-5.*q)/h*(1 - 0.5*q)**3, 0.0)
 
 
-def core_equations(pos, vel, dens, params)
+def core_equations(pos, vel, dens, params):
     # TODO implement boundary conditions here ?
-    i, j = pairs of stuff using cKDTree
+    i, j = 0, 0# pairs of stuff using cKDTree
     r = xvals[i] - xvals[j]
     dW = dWdr(np.abs(r), params.h)
 
-    pos_a = 
-    PI_ij = ???
+    # pos_a = 
+    # PI_ij = ???
     pres_a = params.B*((dens_a/params.rho0)**params.gamma - 1)
     drho_a = params.mass*(vel_a[i] - vel_a[j])*dW*np.sign(r)
     dvel_a = -1*params.mass*((pres_a[i]/dens_a[i]**2) - (pres_a[j]/dens_a[j]**2) + PI_ij)*dW*np.sign(r) - params.g
-    return ???
+    return None # ???
 
 def symplectic_step():
     return None 
 
 
 if __name__ == "__main__":
-    p = parameters()
+    p = parameters(start="wrong attribute")

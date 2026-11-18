@@ -7,6 +7,7 @@ import sys
 sys.path.append("../src/")
 import kernels
 
+import misc
 from matplotlib import rcParams
 rcParams['text.usetex'] = True
 
@@ -64,4 +65,4 @@ if __name__ == "__main__":
     ax[0].plot(p.x, fp, 'r')
     ax[0].plot(p.x[::2], grad[::2], 'ko--')
     ax[1].semilogy(p.x, np.abs(fp - grad), 'g-')
-    plt.show(fig)
+    misc.save_to_logs(fig, "202611/gradient_check_wo_ghosts.pdf", dpi=100)

@@ -28,6 +28,7 @@ def symplectic_step(acc, x, v, rho, dt, t=0.0, drho=None):
     d_h = drho(x_h, v_h, rho_h, t_h) if drho else 0.0
     # corrector
     eps = -d_h / rho_h
+    print(eps)
     rho_new = rho * (2.0 - eps * dt) / (2.0 + eps * dt)
     v_new = v + dt * a_h
     x_new = x_h + 0.5 * dt * v_new
@@ -49,10 +50,7 @@ def integrate(acc, x0, v0, dt, n_steps, rho0=1.0, drho=None, t0=0.0):
     return ts, xs, vs, rs
 
 
-if __name__ == "__main__":
-    import matplotlib
-    import matplotlib.pyplot as plt
-
+def damped_harmonic_oscillator_test():
     om = 2
     zeta = .2 
     T = 20
@@ -74,4 +72,74 @@ if __name__ == "__main__":
                 color=plt.get_cmap('viridis', len(dt_var) + 1)(ii), label=dt)
         ax[1].set(xlabel="t", ylabel="|error|")
         ax[1].legend(title='time step')
+    return None 
+
+
+
+def coupled_oscillator_test():
+    """Damped oscillator whose force depends on the integrated density (closed form).
+ 
+        x'' = -Om^2 x - 2 zeta Om v + alpha (rho - rho0)     (acceleration uses rho)
+        rho' = -beta v                                       (continuity: eps = beta v / rho)
+ 
+    => rho = rho0 - beta (x - x0), so x obeys a damped oscillator with
+        w^2 = Om^2 + alpha*beta,  x_eq = alpha*beta / w^2,  damping rate g = zeta*Om.
+    """
+    Om, zeta = 2., .2
+    alpha, beta = 6., .5               # alpha*beta = 3  ->  w^2 = 7 (vs Om^2 = 4 uncoupled)
+    T = 20
+    dt_var=(.1, .05, .001, 1e-4, 1e-5)
+    x0, rho0 = 1.0, 1.0
+    w2 = Om**2 + alpha*beta
+    g = zeta*Om                        # = c/2
+    w_d = np.sqrt(w2 - g**2)
+    x_eq = alpha*beta / w2
+    acc = lambda x, v, rho, t: -Om**2*x - 2*zeta*Om*v + alpha*(rho - rho0)
+    drho = lambda x, v, rho, t: -beta*v
+    cmap = plt.get_cmap('viridis', len(dt_var) + 1)
+    fig, ax = plt.subplots(2, 2, figsize=(11, 6), tight_layout=True)
+    prev = None
+    for ii, dt in enumerate(dt_var):
+        t, x, v, rho = integrate(acc, x0, 0.0, dt, int(round(T / dt)),
+                                 rho0=rho0, drho=drho, coupled=True)
+        y0 = x0 - x_eq
+        e = np.exp(-g*t)
+        xe = x_eq + y0*e*(np.cos(w_d*t) + g/w_d*np.sin(w_d*t))
+        ve = -y0*w2/w_d*e*np.sin(w_d*t)
+        rhoe = rho0 - beta*(xe - x0)
+        if ii == 0:
+            ax[0, 0].plot(t, xe, "k-", label="analytical")
+            ax[0, 0].plot(t[::2], x[::2], "ro", mfc="none", ms=5, label="numerical")
+            ax[0, 0].set(xlabel="t", ylabel="x")
+            ax[0, 0].legend()
+            ax[0, 1].plot(t, rhoe, "k-", label="analytical")
+            ax[0, 1].plot(t[::2], rho[::2], "ro", mfc="none", ms=5, label="numerical")
+            ax[0, 1].set(xlabel="t", ylabel=r"$\rho$")
+            ax[0, 1].legend()
+        ax[1, 0].semilogy(t, np.abs(x - xe), color=cmap(ii), label=dt)
+        ax[1, 0].set(xlabel="t", ylabel="|error x|")
+        ax[1, 0].legend(title='time step')
+        ax[1, 1].semilogy(t, np.abs(rho - rhoe), color=cmap(ii), label=dt)
+        ax[1, 1].set(xlabel="t", ylabel=r"|error $\rho$|")
+        ax[1, 1].legend(title='time step')
+        ex, ev, er = (np.max(np.abs(x - xe)), np.max(np.abs(v - ve)),
+                      np.max(np.abs(rho - rhoe)))
+        order = "" if prev is None else "   order x,v,rho = " + ", ".join(
+            f"{np.log2(p/q)/np.log2(prev_dt/dt):.2f}" for p, q in zip(prev, (ex, ev, er)))
+        print(f"dt={dt:<8} max|err x|={ex:.3e}  max|err v|={ev:.3e}  max|err rho|={er:.3e}{order}")
+        prev, prev_dt = (ex, ev, er), dt
+ 
+    # sanity: the test must be sensitive to the coupling (force that ignores rho -> wrong frequency)
+    acc_nc = lambda x, v, t: -Om**2*x - 2*zeta*Om*v
+    t, x, v, _ = integrate(acc_nc, x0, 0.0, 1e-3, int(round(T / 1e-3)))
+    xe = x_eq + (x0 - x_eq)*np.exp(-g*t)*(np.cos(w_d*t) + g/w_d*np.sin(w_d*t))
+    print(f"sanity: decoupled acc (no alpha term) gives max|err x| = {np.max(np.abs(x - xe)):.2e} (O(1) expected)")
+    return None
+
+if __name__ == "__main__":
+    import matplotlib
+    import matplotlib.pyplot as plt
+
+    coupled_oscillator_test()
+
     plt.show()

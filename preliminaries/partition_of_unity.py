@@ -7,6 +7,8 @@ import kernels
 from matplotlib import rcParams
 rcParams['text.usetex'] = True
 
+from misc import save_to_logs
+
 def sph_approx(smoothing_param, kernel, neighbour_search: bool = False):
     L = 1.0
     N = 100
@@ -53,4 +55,4 @@ if __name__ == "__main__":
         ax[0, i].legend(title="smoothing * dx")
         ax[0, i].set(ylim=(.7, 1.035), xlim=(0, 1))
 
-    plt.show()
+    save_to_logs(fig, "202611/partition_of_unity_test.pdf", dpi=100)

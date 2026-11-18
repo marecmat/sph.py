@@ -4,6 +4,7 @@ from scipy.spatial import cKDTree
 import matplotlib.pyplot as plt
 import sys
 
+import misc
 sys.path.append("../src/")
 import kernels
 from ghost_particles_1Dlattice import make_ghosts
@@ -128,4 +129,5 @@ if __name__ == "__main__":
     ax[1].semilogy(p.x, np.abs(fp - grad), label='error, no ghosts')
     ax[1].semilogy(p.x, np.abs(fp - grad_ghost), label='error, ghosts')
     ax[1].legend()
-    plt.show()
+    misc.save_to_logs(fig2, "202611/gradient_check_w_ghosts.pdf", dpi=100)
+    misc.save_to_logs(fig, "202611/ghost_particles.pdf", dpi=100)
