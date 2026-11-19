@@ -15,23 +15,17 @@
 import numpy as np
 
 
-def symplectic_step(acc, x, v, rho, dt, t=0.0, drho=None):
-    a_n = acc(x, v, t)
-    d_n = drho(x, v, rho, t) if drho else 0.0
-    # predictor
-    v_h = v + 0.5 * dt * a_n
-    x_h = x + 0.5 * dt * v          # uses v_n (not v_h)
-    rho_h = rho + 0.5 * dt * d_n
-    # evaluate at half step
-    t_h = t + 0.5 * dt
-    a_h = acc(x_h, v_h, t_h)
-    d_h = drho(x_h, v_h, rho_h, t_h) if drho else 0.0
-    # corrector
-    eps = -d_h / rho_h
-    print(eps)
-    rho_new = rho * (2.0 - eps * dt) / (2.0 + eps * dt)
-    v_new = v + dt * a_h
-    x_new = x_h + 0.5 * dt * v_new
+def symplectic_step(p, func, x, v, rho, wall, dt, t=0.0):
+    a_n, d_n = func(p, wall, x, v, rho, t)
+    v_h   = v + 0.5*dt*a_n
+    x_h   = x + 0.5*dt*v
+    rho_h = rho + 0.5*dt*d_n
+    
+    a_h, d_h = func(p, wall, x_h, v_h, rho_h, t + 0.5*dt)
+    eps = -d_h/rho_h
+    rho_new = rho*(2.0 - eps*dt) / (2.0 + eps*dt)
+    v_new   = v + dt*a_h
+    x_new   = x_h + 0.5*dt*v_new
     return x_new, v_new, rho_new
 
 
