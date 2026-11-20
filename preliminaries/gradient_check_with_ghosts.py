@@ -7,7 +7,7 @@ import sys
 import misc
 sys.path.append("../src/")
 import kernels
-from ghost_particles_1Dlattice import make_ghosts
+from distribute_particles import make_ghosts_1D
 
 from matplotlib import rcParams
 rcParams['text.usetex'] = True
@@ -43,7 +43,7 @@ def sph_gradient(f, params, smoothing_param, kernel_gradient,
     if params.bc == 'none':
         x_all, f_all = params.x, f
     else:
-        xg, fg = make_ghosts(params, f, h)
+        xg, fg = make_ghosts_1D(params, f, h)
         x_all = np.concatenate([params.x, xg])
         f_all = np.concatenate([f, fg])
 

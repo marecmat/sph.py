@@ -1,15 +1,17 @@
 from dataclasses import dataclass, replace
 
+import os
 import numpy as np
 from scipy.spatial import cKDTree
 import matplotlib.pyplot as plt
 
 import sys
 sys.path.append("../src/")
-
 from kernels import wendland, wendland_gradient
-from ghost_particles_1Dlattice import make_ghosts
+from run_cases import run_or_load, tait_eq, run_case_1D, load_case_1D
+from distribute_particles import make_particles_1D
 from time_integration import symplectic, rk4, integrate
+
 
 @dataclass
 class parameters():
@@ -25,8 +27,6 @@ class parameters():
     delta: float              = .1            # density diffusion coefficient
     n_wall: int               = 4             # wall layers (>= 2h/dy)
     cfl: float                = .25           # CFL Number
-    # t_relax: float            = 1.0           # relaxation time
-    # damp: float               = .01           # damping
     start: float              = 'hydrostatic' # particle profile ['uniform', 'hydrostatic']
     kernel_gradient: callable = wendland_gradient
     kernel: callable          = wendland
@@ -70,27 +70,6 @@ class parameters():
     def relative_error(self, coord, rho):
         return np.abs((self.compute_pressure(rho) - \
             self.analytical_pressure(coord)))/self.analytical_pressure(coord) #/(self.rho0*self.g*params.H))
-
-
-def tait_eq(B, rho, rho0, gamma):
-    return B*((rho/rho0)**gamma - 1)
-
-
-def make_particles(p, start="hydrostatic"):
-    k = np.arange(p.N)
-    yw = -(np.arange(p.n_wall) + 0.5) * p.dy
-    if start == "uniform":
-        yf = (k + 0.5) * p.dy
-        rf = np.full(p.N, p.rho0)
-    else:
-        u = (1 + p.kp*p.gm*(p.N - 1 - k + 0.5)*p.dy/(p.gm - 1))**((p.gm - 1)/p.gm)
-        yf = p.ys - (u - 1)/p.kp
-        rf = p.rho0*u**(1/(p.gm - 1))
-    x = np.concatenate([yw, yf])
-    v = np.zeros_like(x)
-
-    rho = np.concatenate([np.full(p.n_wall, p.rho0), rf])
-    return x, v, rho
 
 
 def build_equations(p, x, v, rho, t):
@@ -143,15 +122,20 @@ def build_equations(p, x, v, rho, t):
     return acc, drho
 
 
-def load_case(path):
-    """Load a case saved by run_case. Returns exactly what run_case returns."""
-    with np.load(path) as f:
-        data = {key: f[key] for key in f.files if key not in ("xs", "vs", "rs", "wall")}
-        return f["xs"], f["vs"], f["rs"], data
+def tait_eq(B, rho, rho0, gamma):
+    return B*((rho/rho0)**gamma - 1)
 
 
-def run_case(p, n_out:int = 200, save_to:str="none"):
-    x, v, rho = make_particles(p, p.start)
+def run_or_load(params, path, load_func, run_func, rerun=False):
+    if os.path.exists(path) and not rerun:
+        out = load_func(path)
+    else:
+        out = run_func(params, save_to=path)
+    return out
+
+
+def run_case_1D(p, n_out:int = 200, save_to:str="none"):
+    x, v, rho = make_particles_1D(p, p.start)
     ts, xs, vs, rs = integrate(p, p.time_stepper, build_equations, x, v, rho, p.dt, p.n)
 
     every = max(1, p.n // n_out)
@@ -171,17 +155,15 @@ def run_case(p, n_out:int = 200, save_to:str="none"):
 
     return xs, vs, rs, data   
 
+def load_case_1D(path):
+    """Load a case saved by run_case. Returns exactly what run_case returns."""
+    with np.load(path) as f:
+        data = {key: f[key] for key in f.files if key not in ("xs", "vs", "rs", "wall")}
+        return f["xs"], f["vs"], f["rs"], data
 
-def run_or_load(path, rerun=False):
-    if os.path.exists(path) and not rerun:
-        out = load_case(path)
-    else:
-        out = run_case(params, save_to=path)
-    return out
 
 
 if __name__ == "__main__":
-    import os
     from dataclasses import replace
     from plotting import fancy_legend, matplot_header
     from misc import save_to_logs
@@ -223,7 +205,15 @@ if __name__ == "__main__":
     for case in ['uniform', 'hydrostatic']:
         output_file = f'../simulations/{case}.npz'
         params = replace(base_params, start=case)
-        x, v, rho, hist = run_or_load(output_file, rerun=1)
+        x, v, rho, hist = run_or_load(
+            params=params,
+            path=output_file, 
+            load_func=load_case_1D, 
+            run_func=run_case_1D, 
+            rerun=1
+        )
+
+
         yf = x[-1, ~params.wall] 
         v_r = v[-1, ~params.wall]
         ax[0].plot(yf, params.compute_pressure(rho)/1e3, label=case)

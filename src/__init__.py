@@ -1,2 +1,3 @@
 import kernels
-import ghost_particles_1Dlattice
+import distribute_particles
+import time_integration
