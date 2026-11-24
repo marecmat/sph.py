@@ -57,6 +57,22 @@ def make_particles_2D(p, start="hydrostatic"):
 
 if __name__ == "__main__":
 
+    parameters_dict = {
+        "Nx": 30, 
+        "Ny": 30,
+        'xmin': 0,
+        'xmax': 1,
+        'ys': 1,
+        'rho0': 1000,
+        'gm': 7,
+        'kp': 2,
+        'g': -9.81,
+    }
+
+    def dict_to_dataclass(dic: dict, class_name: str):
+        from dataclasses import make_dataclass
+        return make_dataclass(class_name, ((k, type(v)) for k, v in dic.items()))(**dic)
+
     import numpy as np
 
     def make_particles_2D(p, start="hydrostatic"):
@@ -146,7 +162,7 @@ if __name__ == "__main__":
 
     import matplotlib.pyplot as plt
 
-    p = params()
+    p = dict_to_dataclass(parameters_dict, 'params')
     xp, yp, vx, vy, rho, m = make_particles_2D(p)
 
     plt.figure(figsize=(7, 6))

@@ -7,7 +7,7 @@ import sys
 import misc
 sys.path.append("../src/")
 import kernels
-from distribute_particles import make_ghosts_1D
+from distribute_particles import make_ghosts
 
 from matplotlib import rcParams
 rcParams['text.usetex'] = True
@@ -43,7 +43,7 @@ def sph_gradient(f, params, smoothing_param, kernel_gradient,
     if params.bc == 'none':
         x_all, f_all = params.x, f
     else:
-        xg, fg = make_ghosts_1D(params, f, h)
+        xg, fg = make_ghosts(params, f, h)
         x_all = np.concatenate([params.x, xg])
         f_all = np.concatenate([f, fg])
 
@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
 
     # Test with a periodic function
-    params = dict(N=150)
+    params = dict(N=500)
     p = Params(**params)
     smoothing_param = 5
 
@@ -131,3 +131,4 @@ if __name__ == "__main__":
     ax[1].legend()
     misc.save_to_logs(fig2, "202611/gradient_check_w_ghosts.pdf", dpi=100)
     misc.save_to_logs(fig, "202611/ghost_particles.pdf", dpi=100)
+    # plt.show()

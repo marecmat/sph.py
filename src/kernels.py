@@ -1,106 +1,60 @@
-import numpy as np 
+import numpy as np
+
+CUBIC_FACTORS = [ 2./3., 10./(7.*np.pi), 1./np.pi ]
+WENDLAND_FACTORS = [ 3./4., 7./(4.*np.pi), 21./(16.*np.pi) ]
+
+def _factor(h, dim, factors):
+    if dim not in (1, 2, 3):
+        raise ValueError("Dimension must be 1, 2 or 3.")
+    return factors[dim - 1] / h**dim
+
+def _q(r, h, dim):
+    if dim == 1:
+        return np.abs(r) / h
+    return np.linalg.norm(r, axis=-1) / h
+
+def _gradient(r, h, dim, dw, factor):
+    if dim == 1: return (factor / h) * dw * np.sign(r)
+    rn = np.linalg.norm(r, axis=-1, keepdims=True)
+    direction = np.divide( r, rn, out=np.zeros_like(r, dtype=float), where=rn != 0)
+    return (factor / h) * dw[..., None] * direction
 
 def cubic_spline(r, h, dim):
-    q = np.abs(r)/h
-
-    if dim == 1:
-        dim_fac = (2./(3.*h))
-    elif dim == 2:
-        dim_fac = 10/(7*np.pi*h**2)
-    elif dim == 3:
-        dim_fac = 1/(np.pi*h**3)
-    else: 
-        raise ValueError('dim error')
-
-    return  np.where(q < 1.0, dim_fac*(1.0 - 1.5*q**2 + 0.75*q**3),
-            np.where(q < 2.0, dim_fac*0.25*(2.0 - q)**3,
-            0.0))
-
-
+    factor = _factor(h, dim, CUBIC_FACTORS)
+    q = _q(r, h, dim)
+    f = np.where( q < 1., 1. - 1.5*q**2 + 0.75*q**3,
+        np.where( q < 2., 0.25*(2. - q)**3, 0.))
+    return factor * f
 
 def cubic_spline_gradient(r, h, dim):
-
-    r = np.asarray(r)
-    q = np.abs(r) / h
-
-    if dim == 1:
-        dim_fac = 2. / (3. * h)
-    elif dim == 2:
-        dim_fac = 10. / (7. * np.pi * h**2)
-    elif dim == 3:
-        dim_fac = 1. / (np.pi * h**3)
-    else:
-        raise ValueError('dim error')
-
-    dw = np.where(q < 1.0, -3.0*q + 2.25*q**2,
-         np.where(q < 2.0, -0.75*(2.0-q)**2,
-         0.0))
-
-    if dim == 1:
-        return (dim_fac / h) * dw * np.sign(r)
-
-    else:
-        norm_r = np.linalg.norm(r, axis=-1, keepdims=True)
-        direction = np.divide(r, norm_r, 
-                out=np.zeros_like(r, dtype=float), where=norm_r != 0)
-
-        return (dim_fac / h) * dw[..., None] * direction
-
-
+    factor = _factor(h, dim, CUBIC_FACTORS)
+    q = _q(r, h, dim)
+    dw = np.where( q < 1., -3.*q + 2.25*q**2,
+        np.where( q < 2., -0.75*(2. - q)**2, 0.))
+    return _gradient(r, h, dim, dw, factor)
 
 def wendland(r, h, dim):
-    q = np.abs(r)/h
-
-    if dim == 1:
-        dim_fac = 3./(4.*h)
-    elif dim == 2:
-        dim_fac = 7./(4.*np.pi*h**2)
-    elif dim == 3:
-        dim_fac = 21./(16.*np.pi*h**3)
-    else: 
-        raise ValueError('dim error')
-
-    return np.where(q < 2.0, dim_fac*(1 - 0.5*q)**4*(2*q+1), 0.0)
-
-
+    factor = _factor(h, dim, WENDLAND_FACTORS)
+    q = _q(r, h, dim)
+    f = np.where( q < 2., (1. - 0.5*q)**4 * (2.*q + 1.), 0.)
+    return factor * f
 
 def wendland_gradient(r, h, dim):
-
-    r = np.asarray(r)
-    q = np.abs(r) / h
-
-    if dim == 1:
-        dim_fac = 3. / (4. * h)
-    elif dim == 2:
-        dim_fac = 7. / (4. * np.pi * h**2)
-    elif dim == 3:
-        dim_fac = 21. / (16. * np.pi * h**3)
-    else:
-        raise ValueError('dim error')
-
-    dw = np.where(q < 2.0, -5.0*q*(1.0 - 0.5*q)**3, 0.0)
-
-    if dim == 1:
-        return (dim_fac / h) * dw * np.sign(r)
-
-    else:
-        norm_r = np.linalg.norm(r, axis=-1, keepdims=True)
-
-        direction = np.divide(r, norm_r, 
-                out=np.zeros_like(r, dtype=float), where=norm_r != 0)
-        return (dim_fac / h) * dw[..., None] * direction
-
+    factor = _factor(h, dim, WENDLAND_FACTORS)
+    q = _q(r, h, dim)
+    dw = np.where( q < 2., -5.*q*(1. - 0.5*q)**3, 0.)
+    return _gradient(r, h, dim, dw, factor)
 
 if __name__ == "__main__":
-
     import matplotlib.pyplot as plt
+    h = 2.
+    r = np.linspace(-6., 6., 200)
+    fig, ax = plt.subplots( figsize=(5, 4), constrained_layout=True)
 
-    h = 2
-    r = np.linspace(-6, 6, 100)
-
-    fig, ax = plt.subplots(1, 1, figsize=(4,4), constrained_layout=True)
-    ax.plot(r/h, cubic_spline(r,h, dim=2), label='cubic')
-    ax.plot(r/h, wendland(r,h, dim=2), label='wendland')
-    ax.set(xlabel="q", ylabel="W")
+    ax.plot(r/h, cubic_spline(r, h, dim=1), label="Cubic spline")
+    ax.plot(r/h, wendland(r, h, dim=1), label="Wendland C2")
+    ax.set( xlabel="q", ylabel="W(r, h)", title="SPH smoothing kernels")
     ax.legend()
+    ax.grid(alpha=0.3)
+
     plt.show()

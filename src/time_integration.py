@@ -40,17 +40,18 @@ def rk4(f, x, v, rho, dt, t=0.0):
 def integrate(p, time_stepper, func, x0, v0, rho0, dt, n_steps, t0=0.0):
     # func reduced to (x, v, rho, t)
     x, v, rho = (np.array(a, float) for a in (x0, v0, rho0))   # copies, inputs are left untouched
+
     ts = t0 + dt*np.arange(n_steps + 1)
     xs = np.empty((n_steps + 1,) + x.shape)
     vs = np.empty_like(xs)
     rs = np.empty_like(xs)
 
-    xs[0], vs[0], rs[0] = x, v, rho
+    xs[0], vs[0], rs[0] = x, v, rho # [:, np.newaxis]
     f = lambda x, v, rho, t: func(p, x, v, rho, t)     
     
     for n in tqdm(range(n_steps)):
         x, v, rho = time_stepper(f, x, v, rho, dt, ts[n])
-        xs[n + 1], vs[n + 1], rs[n + 1] = x, v, rho
+        xs[n + 1], vs[n + 1], rs[n + 1] = x, v, rho #[:, np.newaxis]
     return ts, xs, vs, rs
 
 

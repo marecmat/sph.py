@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import sys
 sys.path.append("../src/")
 from kernels import wendland, wendland_gradient
-from run_cases import run_or_load, tait_eq, run_case_1D, load_case_1D
+# from run_cases import run_or_load, tait_eq, run_case_1D, load_case_1D
 from distribute_particles import make_particles_1D
 from time_integration import symplectic, rk4, integrate
 
@@ -98,6 +98,7 @@ def build_equations(p, x, v, rho, t):
     pres[p.wall] = pw[p.wall]
     dens[p.wall] = p.rho0*np.maximum(1 + pw[p.wall]/p.B, 1e-3)**(1/p.gm)
 
+
     vij  = v[i] - v[j]
     c    = p.mass*vij*dW # same contribution to i and j
     drho = np.bincount(i, c, n) + np.bincount(j, c, n)
@@ -109,8 +110,8 @@ def build_equations(p, x, v, rho, t):
         psi = (dens[i] - dens[j]) - (p.rho_hydro(x[i]) - p.rho_hydro(x[j]))
         D = 2 * p.delta * p.h * p.c0 * psi * dW / r * ff
         drho += np.bincount(i, p.mass / dens[j] * D, n) \
-                + np.bincount(j, p.mass / dens[i] * D, n)
-
+                - np.bincount(j, p.mass / dens[i] * D, n)
+                # + ?
     vr = vij * r
     mu = p.h * vr / (r**2 + 0.01 * p.h**2)
     Pi = np.where(vr < 0, -p.alpha * p.c0 * mu / (0.5 * (dens[i] + dens[j])), 0.0)
@@ -192,7 +193,7 @@ if __name__ == "__main__":
         alpha=0.1, 
         delta=0.1, 
         N=100,
-        T=.5,
+        T=50,
     )
 
     fig, ax = plt.subplots(1, 3, figsize=(18/2.54, 2.5), 
