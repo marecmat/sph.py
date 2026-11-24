@@ -1,11 +1,3 @@
-"""Core WCSPH solver.
-
-This module owns only the method itself: kernel evaluation, neighbour search,
-the conservation equations, and time integration.  Initial particle layouts,
-analytic solutions and plotting live in ``particles.py`` and in the case
-scripts under ``tests/``.
-"""
-
 import numpy as np
 from scipy.spatial import cKDTree
 
@@ -13,18 +5,20 @@ from .eqs import scatter, tait
 from .kernels import wendland, wendland_gradient
 from .time_integration import symplectic, rk4
 
-
-_STEPPERS = {"symplectic": symplectic, "rk4": rk4}
-
+try:
+    from tqdm import tqdm
+except ImportError:
+    def tqdm(it, **kwargs):
+        return it
 
 class SPHSolver:
-    """Dimension-agnostic weakly-compressible SPH solver."""
 
     def __init__(
         self, *, dim, dx, h_factor=1.3, rho0=1000., gm=7.,
         c0=None, H=None, drho_max=0.01, g=9.81, body_force=0., accel=None,
         viscosity="artificial", alpha=0.1, nu_phys=0., delta=0.,
-        rho_ref=None, wall_noslip=False, stepper="symplectic", cfl=0.25,
+        rho_ref=None, wall_density=None, wall_noslip=False,
+        stepper="symplectic", cfl=0.25,
         T=0.5, periodic_axes=(), L=None,
         kernel=wendland, kernel_gradient=wendland_gradient,
     ):
@@ -34,13 +28,9 @@ class SPHSolver:
             if H is None:
                 raise ValueError("pass c0 or H to set the numerical speed of sound")
             c0 = np.sqrt(g*H/drho_max)
-        if viscosity not in ("artificial", "laminar"):
-            raise ValueError(f"unknown viscosity: {viscosity!r}")
-        if stepper not in _STEPPERS:
-            raise ValueError(f"unknown stepper: {stepper!r}")
+
 
         self.dim = dim
-        self.H = H
         self.dx = float(dx)
         self.h = h_factor*self.dx
         self.support = 2*self.h
@@ -55,15 +45,27 @@ class SPHSolver:
         self.viscosity = viscosity
         self.alpha = float(alpha)
         self.nu_phys = float(nu_phys)
+
+        if viscosity not in ("artificial", "laminar"):
+            raise ValueError(f"unknown viscosity: {viscosity}")
+
         self.nu = (self.nu_phys if viscosity == "laminar"
                    else self.alpha*self.h*self.c0/8)
         self.delta = float(delta)
         self.rho_ref = rho_ref
+        self.wall_density = wall_density
         self.wall_noslip = bool(wall_noslip)
-        self.stepper = _STEPPERS[stepper]
+        
+        if stepper == "symplectic":
+            self.stepper = symplectic
+        elif stepper == "rk4":
+            self.stepper = rk4
+        else:
+            raise ValueError(f"unknown stepper: {stepper}")
 
         self.accel = self._body_acceleration(g, body_force, accel)
         self.dt = self.cfl*min(self._time_limits())
+        self.n_steps = int(np.ceil(self.T/self.dt))
 
         self.periodic_axes = tuple(periodic_axes)
         self.L = tuple(L) if L is not None else tuple(None for _ in range(dim))
@@ -98,10 +100,6 @@ class SPHSolver:
             limits.append(np.sqrt(self.h/f))
         return limits
 
-    @property
-    def n_steps(self):
-        return int(np.ceil(self.T/self.dt))
-
     def W(self, r):
         rr = np.asarray(r)
         if self.dim == 1 and rr.ndim > 1:
@@ -115,8 +113,7 @@ class SPHSolver:
         """Return undirected pair indices with periodic images handled."""
         boxsize = tuple(
             self.L[axis] if axis in self.periodic_axes else 0.
-            for axis in range(self.dim)
-        )
+            for axis in range(self.dim))
         xt = x.copy()
         for axis in self.periodic_axes:
             xt[:, axis] = np.mod(xt[:, axis], self.L[axis])
@@ -127,7 +124,6 @@ class SPHSolver:
         return pairs[:, 0], pairs[:, 1]
 
     def equations(self, x, v, rho, t):
-        """Return ``(acceleration, density_rate)`` for the current state."""
         n = len(rho)
         wall = self.wall if self.wall is not None else np.zeros(n, dtype=bool)
 
@@ -158,6 +154,15 @@ class SPHSolver:
         dens[wall] = self.rho0*np.maximum(
             1 + pw[wall]/self.B, 1e-3
         )**(1/self.gm)
+
+        # Override selected wall particles (e.g. top ghosts) with a prescribed
+        # density.  NaN in the returned array means "use the Adami value".
+        if self.wall_density is not None:
+            rho_w = np.asarray(self.wall_density(x[wall]), dtype=float)
+            given = np.isfinite(rho_w)
+            p_w = tait(self.B, self.rho0, np.where(given, rho_w, self.rho0), self.gm)
+            dens[wall] = np.where(given, rho_w, dens[wall])
+            pres[wall] = np.where(given, p_w, pres[wall])
 
         veff = v
         if self.wall_noslip:
@@ -211,7 +216,6 @@ class SPHSolver:
         return self.stepper(self.equations, x, v, rho, dt, t)
 
     def run(self, x, v, rho, wall=None, T=None, save_every=10):
-        """Integrate a supplied initial state and return saved snapshots."""
         x = np.asarray(x, dtype=float)
         v = np.asarray(v, dtype=float)
         rho = np.asarray(rho, dtype=float)
@@ -227,7 +231,7 @@ class SPHSolver:
         to_save = set(saved.tolist())
 
         xs, vs, rs = [], [], []
-        for n in range(ns + 1):
+        for n in tqdm(range(ns + 1)):
             if n in to_save:
                 xs.append(x.copy())
                 vs.append(v.copy())

@@ -5,7 +5,7 @@ WENDLAND_FACTORS = [ 3./4., 7./(4.*np.pi), 21./(16.*np.pi) ]
 
 def _factor(h, dim, factors):
     if dim not in (1, 2, 3):
-        raise ValueError("Dimension must be 1, 2 or 3.")
+        raise ValueError("dim must be 1, 2 or 3.")
     return factors[dim - 1] / h**dim
 
 def _q(r, h, dim):
@@ -50,11 +50,7 @@ if __name__ == "__main__":
     h = 2.
     r = np.linspace(-6., 6., 200)
     fig, ax = plt.subplots( figsize=(5, 4), constrained_layout=True)
-
-    ax.plot(r/h, cubic_spline(r, h, dim=1), label="Cubic spline")
-    ax.plot(r/h, wendland(r, h, dim=1), label="Wendland C2")
-    ax.set( xlabel="q", ylabel="W(r, h)", title="SPH smoothing kernels")
-    ax.legend()
-    ax.grid(alpha=0.3)
-
+    ax.plot(r/h, cubic_spline(r, h, dim=1), label="spline")
+    ax.plot(r/h, wendland(r, h, dim=1), label="wendland")
+    ax.set(xlabel="q", ylabel="W(r, h)"); ax.legend()
     plt.show()

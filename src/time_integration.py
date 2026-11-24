@@ -1,4 +1,3 @@
-
 def symplectic(f, x, v, rho, dt, t=0.0):
     a_n, d_n = f(x, v, rho, t)
     v_h = v + 0.5*dt*a_n

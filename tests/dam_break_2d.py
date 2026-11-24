@@ -12,7 +12,7 @@ Run from anywhere:  python tests/dam_break_2d.py [--no-show]
 import numpy as np
 import matplotlib.pyplot as plt
 
-from _common import finish
+from common import finish
 from src.particles import dam_break_2d
 from src.wcsph import SPHSolver
 
@@ -24,7 +24,7 @@ C0 = np.sqrt(G*H/DRHO_MAX)
 T = 1.0
 
 layout = dam_break_2d(
-    DX, H, LX, rho0=RHO0, gm=GM, c0=C0, n_wall=N_WALL,
+    DX, H, LX, rho0=RHO0, n_wall=N_WALL,
     fluid_width=0.4, fluid_height=0.5, diamond=True,
 )
 solver = SPHSolver(

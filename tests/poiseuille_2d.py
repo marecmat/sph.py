@@ -9,7 +9,7 @@ Run from anywhere:  python tests/poiseuille_2d.py [--no-show]
 import numpy as np
 import matplotlib.pyplot as plt
 
-from _common import finish
+from common import finish
 from src.particles import channel_2d
 from src.wcsph import SPHSolver
 
@@ -22,7 +22,7 @@ C0 = U_MAX/MACH
 T = 3.0
 
 layout = channel_2d(
-    DX, H, LX, rho0=RHO0, gm=GM, c0=C0, n_wall=N_WALL, diamond=True,
+    DX, H, LX, rho0=RHO0, n_wall=N_WALL, diamond=True,
 )
 solver = SPHSolver(
     dim=2, dx=layout.dx, rho0=RHO0, gm=GM, c0=C0, g=0.0, body_force=F,

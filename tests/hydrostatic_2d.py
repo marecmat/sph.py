@@ -9,8 +9,8 @@ Run from anywhere:  python tests/hydrostatic_2d.py [--no-show]
 import numpy as np
 import matplotlib.pyplot as plt
 
-from _common import finish
-from _hydrostatic import hydrostatic_density, hydrostatic_pressure
+from common import finish
+from hydrostatic import hydrostatic_density, hydrostatic_pressure
 from src.eqs import tait
 from src.particles import hydrostatic_column_2d
 from src.wcsph import SPHSolver
@@ -21,6 +21,14 @@ N_WALL = 4
 RHO0, GM, G, DRHO_MAX = 1000.0, 7.0, 9.81, 0.01
 C0 = np.sqrt(G*H/DRHO_MAX)
 T = 0.4
+
+
+def top_ghost_density(xw):
+    """Exact Tait density on top ghosts; leave bottom walls to Adami."""
+    return np.where(xw[:, 1] > H,
+                    hydrostatic_density(xw[:, 1], H, RHO0, GM, C0, G),
+                    np.nan)
+
 
 # Rigid walls need the wider support to sample enough wall neighbours.
 CASES = (
@@ -41,7 +49,7 @@ for row, (name, periodic, walls, h_factor) in enumerate(CASES):
         solver = SPHSolver(
             dim=2, dx=layout.dx, h_factor=h_factor, H=H,
             rho0=RHO0, gm=GM, c0=C0, g=G, alpha=0.1, delta=0.1,
-            rho_ref=rho_ref, T=T,
+            rho_ref=rho_ref, wall_density=top_ghost_density, T=T,
             periodic_axes=(0,) if periodic else (), L=layout.L,
         )
         out = solver.run(
@@ -55,11 +63,12 @@ for row, (name, periodic, walls, h_factor) in enumerate(CASES):
         P = tait(solver.B, solver.rho0, rho, solver.gm)
         err = np.abs(P - hydrostatic_pressure(xs[:, 1], H, RHO0, GM, C0, G))/(RHO0*G*H)
         bottom = err[xs[:, 1] < 0.05*H]
+        top = err[xs[:, 1] > 0.95*H]
         KE = 0.5*solver.mass*np.sum(out["v"][:, fluid]**2, axis=(1, 2))
 
         print(f"[{name} / {start}] dx={layout.dx:.3e}  steps={solver.n_steps}")
         print(f"   max |p - p_exact|/(rho g H) = {err.max():.2e}"
-              f"  (near y=0: {bottom.max():.2e})")
+              f"  (near y=0: {bottom.max():.2e}, near y=H: {top.max():.2e})")
         print(f"   max |vx| = {np.abs(out['v'][-1][fluid, 0]).max():.2e}"
               f"  max |vy| = {np.abs(out['v'][-1][fluid, 1]).max():.2e}")
 
