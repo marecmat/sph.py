@@ -9,9 +9,9 @@ from src.particles import hydrostatic_column_1d
 from src.wcsph import SPHSolver
 import numpy as np
 
-dx = 0.01
+dx = 0.08
 h = 1.0
-t = 8
+t = 3
 n_wall = 4
 rho0 = 1000.0
 gm = 7.0

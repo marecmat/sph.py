@@ -80,12 +80,12 @@ class SPHSolver:
         self.wall_density = wall_density
         self.wall_noslip = wall_noslip
 
-    def W(self, r):
-        rr = r[..., 0] if self.dim == 1 and r.ndim > 1 else r
+    def W(self):
+        rr = self.r[..., 0] if self.dim == 1 and self.r.ndim > 1 else self.r
         return self.kernel(rr, self.h, self.dim)
 
-    def gradW(self, r):
-        return self.kernel_gradient(r, self.h, self.dim)
+    def gradW(self):
+        return self.kernel_gradient(self.r, self.h, self.dim)
 
     def neighbours(self, x):
         boxsize = tuple(self.L[axis] if axis in self.periodic_axes 
@@ -99,13 +99,13 @@ class SPHSolver:
                     .query_pairs(self.support, output_type="ndarray")
         return pairs[:, 0], pairs[:, 1]
 
-    def treat_walls(self, i, j, r, W, n, rho, pres, dens):
+    def treat_walls(self, W, n, rho, pres, dens):
         # Adami self.wall pressure/density
-        wall_fluid_pair  = self.wall[i] != self.wall[j]          # self.wall-fluid pairs
+        wall_fluid_pair  = self.wall[self.i] != self.wall[self.j]          # self.wall-fluid pairs
         Ws  = W[wall_fluid_pair] # kernel for fluid - self.wall interaction
-        wall_particle_index   = np.where(self.wall[i], i, j)[wall_fluid_pair] # self.wall particle index 
-        fluid_particle_index  = np.where(self.wall[i], j, i)[wall_fluid_pair] # fluid particle index
-        rwf = np.where(self.wall[i], 1., -1.)[wall_fluid_pair, None]*r[wall_fluid_pair] # relative position
+        wall_particle_index   = np.where(self.wall[self.i], self.i, self.j)[wall_fluid_pair] # self.wall particle index 
+        fluid_particle_index  = np.where(self.wall[self.i], self.j, self.i)[wall_fluid_pair] # fluid particle index
+        rwf = np.where(self.wall[self.i], 1., -1.)[wall_fluid_pair, None]*self.r[wall_fluid_pair] # relative position
         pres_wall = pres[fluid_particle_index]*Ws + np.sum(self.accel*rwf, axis=1)*rho[fluid_particle_index]*Ws        
                         # first order pressure extrapolation
         sw  = accumulate_contribs(wall_particle_index, fluid_particle_index, Ws, np.zeros_like(Ws), n)
@@ -127,15 +127,15 @@ class SPHSolver:
             pres[self.wall] = np.where(np.isfinite(rho_w), p_w, pres[self.wall])
         return pres, dens
 
-    def density_diffusion(self, dens, n, drho):
-        ff  = ~self.wall[i] & ~self.wall[j]
+    def density_diffusion(self, x, dens, n, rn, dW, drho):
+        ff  = ~self.wall[self.i] & ~self.wall[self.j]
         ref = self.rho_ref(x)
-        psi = (dens[i] - dens[j]) - (ref[i] - ref[j])
-        D   = (2*self.delta*self.h*self.c0*psi*np.sum(dW*r, axis=1)
+        psi = (dens[self.i] - dens[self.j]) - (ref[self.i] - ref[self.j])
+        D   = (2*self.delta*self.h*self.c0*psi*np.sum(dW*self.r, axis=1)
                 / np.maximum(rn**2, 1e-30)*ff)
 
         drho += accumulate_contribs(
-            i, j, self.mass/dens[j]*D, -self.mass/dens[i]*D, n)
+            self.i, self.j, self.mass/dens[self.j]*D, -self.mass/dens[self.i]*D, n)
 
         return drho
 
@@ -143,19 +143,19 @@ class SPHSolver:
         n = len(rho)
         # self.wall = self.self.wall if self.self.wall is not None else np.zeros(n, dtype=bool)
 
-        i, j = self.neighbours(x)
-        r = x[i] - x[j]
+        self.i, self.j = self.neighbours(x)
+        self.r = x[self.i] - x[self.j]
         for axis in self.periodic_axes:
-            r[:, axis] -= self.L[axis]*np.round(r[:, axis]/self.L[axis])
+            self.r[:, axis] -= self.L[axis]*np.round(self.r[:, axis]/self.L[axis])
 
-        rn = np.linalg.norm(r, axis=1)
-        W, dW = self.W(r), self.gradW(r)
+        rn = np.linalg.norm(self.r, axis=1)
+        W, dW = self.W(), self.gradW()
 
         # equation of state: pres from rho
         pres_0 = tait(self.B, self.rho0, rho, self.gm)
         dens_0 = rho.copy()
 
-        pres, dens = self.treat_walls(i, j, r, W, n, rho, pres_0, dens_0)
+        pres, dens = self.treat_walls(W, n, rho, pres_0, dens_0)
 
         veff = v
         if self.wall_noslip:
@@ -164,32 +164,32 @@ class SPHSolver:
             veff[valid_wall_particle] = -vw[valid_wall_particle]/sw[valid_wall_particle, None]
 
         # Continuity eq.
-        vij = v[i] - v[j]
+        vij = v[self.i] - v[self.j]
         c = self.mass*np.sum(vij*dW, axis=1)
-        drho = accumulate_contribs(i, j, c, c, n)
+        drho = accumulate_contribs(self.i, self.j, c, c, n)
 
 
         if self.delta > 0:
             # Delta-SPH density diffusion, can be done depending on a ref. profile.
-            drho = self.density_diffusion(dens, n, drho)
+            drho = self.density_diffusion(x, dens, n, rn, dW, drho)
         
         # Momentum equation
-        vv = veff[i] - veff[j]
+        vv = veff[self.i] - veff[self.j]
         Pi = 0.
         if self.viscosity == "artificial":
-            vr = np.sum(vv*r, axis=1)
+            vr = np.sum(vv*self.r, axis=1)
             mu = self.h*vr/(rn**2 + 0.01*self.h**2)
             Pi = np.where(vr < 0,
-                -self.alpha*self.c0*mu/(0.5*(dens[i] + dens[j])), 0.
+                -self.alpha*self.c0*mu/(0.5*(dens[self.i] + dens[self.j])), 0.
             )
 
-        f = -(self.mass*(pres[i]/dens[i]**2 + pres[j]/dens[j]**2 + Pi))[:, None]*dW
+        f = -(self.mass*(pres[self.i]/dens[self.i]**2 + pres[self.j]/dens[self.j]**2 + Pi))[:, None]*dW
         if self.viscosity == "laminar":
-            K = (self.mass*4*self.nu_phys*np.sum(r*dW, axis=1)
-                 / ((dens[i] + dens[j])*(rn**2 + 0.01*self.h**2)))
+            K = (self.mass*4*self.nu_phys*np.sum(self.r*dW, axis=1)
+                 / ((dens[self.i] + dens[self.j])*(rn**2 + 0.01*self.h**2)))
             f += K[:, None]*vv
 
-        acc = accumulate_contribs(i, j, f, -f, n) + self.accel
+        acc = accumulate_contribs(self.i, self.j, f, -f, n) + self.accel
         
         # fixed walls
         acc[self.wall] = 0.
