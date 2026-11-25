@@ -1,30 +1,35 @@
+import sys
+from pathlib import Path
+PROJECT_ROOT = str(Path(__file__).resolve().parents[2])
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
-
-import sys
-from pathlib import Path
-PROJECT_ROOT = str(Path(__file__).resolve().parents[1])
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
 from src.utils import load
 from src.eqs import hydrostatic_pressure, tait
 
-anim_frames = 60    # number of frames in animation.gif
+anim_frames = 300
+starts = ("uniform", "hydrostatic")
+
 
 def main():
-    d = load('data.npz')
-    starts = tuple(str(s) for s in d["starts"])
-    H, RHO0, GM = float(d["h"]), float(d["rho0"]), float(d["gm"])
-    C0, G = float(d["c0"]), float(d["g"])
+    files = {s: load(f"data_{s}.npz") for s in starts}
 
-    n_snap = len(d[f"{starts[0]}_t"])
+    def get(start, key):
+        return files[start][key]
+
+    first = files[starts[0]]
+    H, RHO0, GM = first["h"], first["rho0"], first["gm"]
+    C0, G = first["c0"], first["g"]
+
+    n_snap = len(get(starts[0], "t"))
     frame_ids = np.unique(
         np.linspace(0, n_snap - 1, min(anim_frames, n_snap), dtype=int)
     )
     vmax = max(
-        np.abs(d[f"{start}_v"][:, d[f"{start}_fluid"], 0]).max()
-        for start in starts
+        np.abs(get(s, "v")[:, get(s, "fluid"), 0]).max() for s in starts
     )
     vmax = max(vmax, 1e-6)
 
@@ -50,15 +55,15 @@ def main():
     def update(k):
         idx = frame_ids[k]
         for start in starts:
-            fluid = d[f"{start}_fluid"]
-            ys = d[f"{start}_x"][idx][fluid, 0]
+            fluid = get(start, "fluid")
+            ys = get(start, "x")[idx][fluid, 0]
             order = np.argsort(ys)
-            ps = tait(float(d[f"{start}_B"]), RHO0,
-                      d[f"{start}_rho"][idx][fluid][order], GM)/1e3
-            vs = d[f"{start}_v"][idx][fluid, 0][order]
+            ps = tait(float(get(start, "B")), RHO0,
+                      get(start, "rho")[idx][fluid][order], GM)/1e3
+            vs = get(start, "v")[idx][fluid, 0][order]
             lines_p[start].set_data(ps, ys[order])
             lines_v[start].set_data(vs, ys[order])
-        title.set_text(f"t = {d[f'{starts[0]}_t'][idx]:.2f}")
+        title.set_text(f"t = {get(starts[0], 't')[idx]:.2f}")
         return [*lines_p.values(), *lines_v.values(), title]
 
     anim = FuncAnimation(fig, update, frames=len(frame_ids), interval=100)
