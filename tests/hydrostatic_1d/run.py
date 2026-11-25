@@ -24,7 +24,7 @@ def run(start):
     solver = SPHSolver(
         dim=1, dx=case.dx, H=h, rho0=rho0, gm=gm, c0=c0, 
         h_factor=h_factor, alpha=alpha, delta=delta, rho_ref=rho_ref,
-        accel=np.array([g]), wall_density=top_ghost_density, T=t, periodic_axes=(),
+        accel=np.array([-g]), wall_density=top_ghost_density, T=t, periodic_axes=(),
     )
     
     out = solver.run(

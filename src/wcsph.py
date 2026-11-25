@@ -13,36 +13,22 @@ except ImportError:
 
 class SPHSolver:
 
-    def __init__(self, 
-        dim:int=1, 
-        dx:float=.02, 
-        h_factor:float=1.3, 
-        H: float=1, 
-        L:float=None, 
-        rho0:float=1000., 
-        gm:int=7., 
-        c0:float=0, 
-        drho_max=0.01, 
-        accel:np.ndarray=np.array([-9.81]),
-        viscosity="artificial", 
-        alpha=0.1, 
-        nu_phys=0., 
-        delta=0.,
-        rho_ref=None, 
-        wall_density=None, 
-        wall_noslip=False,
-        stepper="symplectic", 
-        cfl=0.25,
-        T=0.5, 
-        periodic_axes=(), 
-        kernel=wendland, 
-        kernel_gradient=wendland_gradient,
+    def __init__(self, dim:int=1, dx:float=.02, H: float=1, L:float=None, 
+        T:float=0.5, rho0:float=1000, gm:int=7, c0:float=None, drho_max:float=0.01, 
+        accel:np.ndarray=None, alpha:float=0.1, nu_phys:float=0, delta:float=0,
+        h_factor:float=1.3, cfl:float=0.25, rho_ref:np.ndarray=None, 
+        wall_density:callable=None, wall_noslip:bool=False,
+        viscosity:str="artificial", stepper:str="symplectic", 
+        periodic_axes=(), kernel=wendland, kernel_gradient=wendland_gradient,
     ):
         
         if dim not in (1, 2):
             raise ValueError("only dim=1 and dim=2 is valid")
-        if accel.shape[0] != dim:
-            raise ValueError('invalid acceleration vector shape, given dimension')
+        if accel is None:                     
+            accel = np.zeros(dim); accel[-1] = -9.81
+        accel = np.array(accel, dtype=float) 
+        if accel.shape != (dim,) or not np.all(np.isfinite(accel)):
+            raise ValueError(f"accel needs shape ({dim},), got {accel}")
         if viscosity not in ("artificial", "laminar"):
             raise ValueError(f"unknown viscosity: {viscosity}")
         if stepper == "symplectic":
@@ -60,33 +46,30 @@ class SPHSolver:
             if self.L[axis] is None:
                 raise ValueError(f"missing domain length for periodic axis {axis}")
 
-        self.dim = dim;     self.dx = dx; self.h = h_factor*self.dx
-        self.support = 2*self.h; self.accel = accel
-        if c0 == 0.:
-            self.c0 = np.sqrt(np.linalg.norm(self.accel)*H/drho_max)
-        else:
-            self.c0 = c0
-
-        self.rho0 = rho0;   self.gm = gm;   self.T = T
+        self.dim = dim;             self.dx = dx;           self.h = h_factor*self.dx
+        self.support = 2*self.h;    self.accel = accel;     self.nu_phys = nu_phys
+        self.rho0 = rho0;           self.gm = gm;           self.T = T
+        self.delta = delta;         self.rho_ref = rho_ref; self.wall = None
+        self.viscosity = viscosity; self.alpha = alpha;     
+        
+        if not c0:                              
+            c0 = np.sqrt(abs(self.accel[-1])*H/drho_max)
+        if not c0 > 0:
+            raise ValueError("c0 must be > 0")
+        self.c0 = c0
         self.B = self.rho0*self.c0**2/self.gm
         self.mass = self.rho0*self.dx**dim
-        self.viscosity = viscosity
-        self.alpha = alpha
-        self.nu_phys = nu_phys
         self.nu = (self.nu_phys if viscosity == "laminar"
                    else self.alpha*self.h*self.c0/8)
-        self.delta = float(delta)
-        self.rho_ref = rho_ref
-        self.wall = None
-        self.wall_density = wall_density
-        self.wall_noslip = bool(wall_noslip)
 
-        
-        self.cfl = float(cfl)
+        self.cfl = cfl
         self.dt = self.cfl*min(self._time_limits())
         self.n_steps = int(np.ceil(self.T/self.dt))
+
         self.kernel = kernel
         self.kernel_gradient = kernel_gradient
+        self.wall_density = wall_density
+        self.wall_noslip = wall_noslip
 
     def _time_limits(self):
         limits = [self.h/self.c0]
@@ -107,7 +90,6 @@ class SPHSolver:
         return self.kernel_gradient(r, self.h, self.dim)
 
     def neighbours(self, x):
-        """Return undirected pair indices with periodic images handled."""
         boxsize = tuple(
             self.L[axis] if axis in self.periodic_axes else 0.
             for axis in range(self.dim))
@@ -148,18 +130,14 @@ class SPHSolver:
         pw[ok] = num[ok]/sw[ok]
 
         pres[wall] = pw[wall]
-        dens[wall] = self.rho0*np.maximum(
-            1 + pw[wall]/self.B, 1e-3
-        )**(1/self.gm)
+        dens[wall] = self.rho0*np.maximum(1 + pw[wall]/self.B, 1e-3)**(1/self.gm)
 
-        # Override selected wall particles (e.g. top ghosts) with a prescribed
-        # density.  NaN in the returned array means "use the Adami value".
         if self.wall_density is not None:
             rho_w = np.asarray(self.wall_density(x[wall]), dtype=float)
-            given = np.isfinite(rho_w)
-            p_w = tait(self.B, self.rho0, np.where(given, rho_w, self.rho0), self.gm)
-            dens[wall] = np.where(given, rho_w, dens[wall])
-            pres[wall] = np.where(given, p_w, pres[wall])
+            p_w = tait(self.B, self.rho0, 
+                        np.where(np.isfinite(rho_w), rho_w, self.rho0), self.gm)
+            dens[wall] = np.where(np.isfinite(rho_w), rho_w, dens[wall])
+            pres[wall] = np.where(np.isfinite(rho_w), p_w, pres[wall])
 
         veff = v
         if self.wall_noslip:
@@ -192,10 +170,8 @@ class SPHSolver:
         if self.viscosity == "artificial":
             vr = np.sum(vv*r, axis=1)
             mu = self.h*vr/(rn**2 + 0.01*self.h**2)
-            Pi = np.where(
-                vr < 0,
-                -self.alpha*self.c0*mu/(0.5*(dens[i] + dens[j])),
-                0.,
+            Pi = np.where(vr < 0,
+                -self.alpha*self.c0*mu/(0.5*(dens[i] + dens[j])), 0.
             )
 
         f = -(self.mass*(pres[i]/dens[i]**2 + pres[j]/dens[j]**2 + Pi))[:, None]*dW
@@ -236,11 +212,5 @@ class SPHSolver:
             if n < ns:
                 x, v, rho = self.step(x, v, rho, self.dt, n*self.dt)
 
-        return dict(
-            t=saved*self.dt,
-            x=np.array(xs),
-            v=np.array(vs),
-            rho=np.array(rs),
-            wall=wall,
-            dt=self.dt,
-        )
+        return dict(t=saved*self.dt, x=np.array(xs), v=np.array(vs), 
+                                rho=np.array(rs), wall=wall, dt=self.dt)
