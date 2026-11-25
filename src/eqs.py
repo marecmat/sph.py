@@ -1,15 +1,28 @@
 import numpy as np
 
-def scatter(i, j, a, b, n):
-    """Sum of pair contributions a to i and b to j per particle."""
+def accumulate_contribs(i, j, a, b, n):
+    """
+    s_p = sum_{q: i_q = p} a_q + sum_{q: j_q = p} b_q 
+
+    for each interacting pair, 
+        i first particle index
+        j 2nd particle idx
+        a contribution of 1st particle
+        b contribution of 2nd particle
+        n total nb of partcl
+    
+    bincount accumulates the pairwise contributions to each particle, 
+    it counts the number of occurrences of each value in array given weights a/b
+    """
+    
     if a.ndim == 1:
         return np.bincount(i, a, n) + np.bincount(j, b, n)
-
-    return np.stack(
-        [np.bincount(i, a[:, k], n) + np.bincount(j, b[:, k], n)
-         for k in range(a.shape[1])],
-        axis=1,
-    )
+    else:   
+        return np.stack([   
+                        np.bincount(i, a[:, k], n) + \
+                        np.bincount(j, b[:, k], n) 
+                    for k in range(a.shape[1]) #it over each spatial component
+                ], axis=1,)
 
 def tait(B, rho0, rho, gm):
     """Tait equation of state."""

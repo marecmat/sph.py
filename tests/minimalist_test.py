@@ -11,7 +11,7 @@ import numpy as np
 
 dx = 0.01
 h = 1.0
-t = 50
+t = 8
 n_wall = 4
 rho0 = 1000.0
 gm = 7.0
@@ -25,8 +25,8 @@ def run(start):
     case = hydrostatic_column_1d(dx, h, rho0=rho0, gm=gm, c0=c0, g=g, start='uniform', n_wall=n_wall)
     
     s = SPHSolver(dim=1, dx=case.dx, H=h, rho0=rho0, gm=gm, c0=c0, wall_density=None, # top_ghost_density, 
-        h_factor=2.0, alpha=alpha, delta=0, accel=np.array([-g]), T=t, periodic_axes=())
-    o = s.run(case.x, case.v, case.rho, case.wall, save_every=max(1, s.n_steps//n_snapshots))
+        h_factor=2.0, alpha=alpha, delta=0.1, accel=np.array([-g]), T=t, periodic_axes=())
+    o = s.run(case.x, case.v, case.rho, save_every=max(1, s.n_steps//n_snapshots))
 
     fluid = ~case.wall
     y = o["x"][-1][fluid, 0]
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     C0, G = d["c0"], d["g"]
     fluid = d["fluid"]
     y = d["x"][-1][fluid, 0]
-    print(y.shape, d["p"].shape)
+
     ax[0].plot(y, d["p"]/1e3, ".", ms=3)
     ax[1].semilogy(y, d["err"], ".", ms=3)
     ax[2].semilogy(d["t"][1:], d["ke"][1:])

@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.spatial import cKDTree
 
-from .eqs import scatter, tait
+from .eqs import accumulate_contribs, tait
 from .kernels import wendland, wendland_gradient
 from .time_integration import symplectic, rk4
 
@@ -12,7 +12,6 @@ except ImportError:
         return it
 
 class SPHSolver:
-
     def __init__(self, dim:int=1, dx:float=.02, H: float=1, L:float=None, 
         T:float=0.5, rho0:float=1000, gm:int=7, c0:float=None, drho_max:float=0.01, 
         accel:np.ndarray=None, alpha:float=0.1, nu_phys:float=0, delta:float=0,
@@ -22,6 +21,7 @@ class SPHSolver:
         periodic_axes=(), kernel=wendland, kernel_gradient=wendland_gradient,
     ):
         
+        # tests and verifications
         if dim not in (1, 2):
             raise ValueError("only dim=1 and dim=2 is valid")
         if accel is None:                     
@@ -46,12 +46,15 @@ class SPHSolver:
             if self.L[axis] is None:
                 raise ValueError(f"missing domain length for periodic axis {axis}")
 
+        # assign all values to class
         self.dim = dim;             self.dx = dx;           self.h = h_factor*self.dx
         self.support = 2*self.h;    self.accel = accel;     self.nu_phys = nu_phys
         self.rho0 = rho0;           self.gm = gm;           self.T = T
         self.delta = delta;         self.rho_ref = rho_ref; self.wall = None
         self.viscosity = viscosity; self.alpha = alpha;     
         
+        if self.rho_ref is None:
+            self.rho_ref = lambda x: np.full(len(x), self.rho0)
         if not c0:                              
             c0 = np.sqrt(abs(self.accel[-1])*H/drho_max)
         if not c0 > 0:
@@ -62,8 +65,14 @@ class SPHSolver:
         self.nu = (self.nu_phys if viscosity == "laminar"
                    else self.alpha*self.h*self.c0/8)
 
+        limits = [self.h/self.c0]
+        if self.nu > 0:
+            limits.append(self.h**2/self.nu)
+        f = np.linalg.norm(self.accel)
+        if f > 0:
+            limits.append(np.sqrt(self.h/f))
         self.cfl = cfl
-        self.dt = self.cfl*min(self._time_limits())
+        self.dt = self.cfl*min(limits)
         self.n_steps = int(np.ceil(self.T/self.dt))
 
         self.kernel = kernel
@@ -71,28 +80,16 @@ class SPHSolver:
         self.wall_density = wall_density
         self.wall_noslip = wall_noslip
 
-    def _time_limits(self):
-        limits = [self.h/self.c0]
-        if self.nu > 0:
-            limits.append(self.h**2/self.nu)
-        f = np.linalg.norm(self.accel)
-        if f > 0:
-            limits.append(np.sqrt(self.h/f))
-        return limits
-
     def W(self, r):
-        rr = np.asarray(r)
-        if self.dim == 1 and rr.ndim > 1:
-            rr = rr[..., 0]
+        rr = r[..., 0] if self.dim == 1 and r.ndim > 1 else r
         return self.kernel(rr, self.h, self.dim)
 
     def gradW(self, r):
         return self.kernel_gradient(r, self.h, self.dim)
 
     def neighbours(self, x):
-        boxsize = tuple(
-            self.L[axis] if axis in self.periodic_axes else 0.
-            for axis in range(self.dim))
+        boxsize = tuple(self.L[axis] if axis in self.periodic_axes 
+                    else 0. for axis in range(self.dim))
         xt = x.copy()
         for axis in self.periodic_axes:
             xt[:, axis] = np.mod(xt[:, axis], self.L[axis])
@@ -102,9 +99,49 @@ class SPHSolver:
                     .query_pairs(self.support, output_type="ndarray")
         return pairs[:, 0], pairs[:, 1]
 
+    def treat_walls(self, i, j, r, W, n, rho, pres, dens):
+        # Adami self.wall pressure/density
+        wall_fluid_pair  = self.wall[i] != self.wall[j]          # self.wall-fluid pairs
+        Ws  = W[wall_fluid_pair] # kernel for fluid - self.wall interaction
+        wall_particle_index   = np.where(self.wall[i], i, j)[wall_fluid_pair] # self.wall particle index 
+        fluid_particle_index  = np.where(self.wall[i], j, i)[wall_fluid_pair] # fluid particle index
+        rwf = np.where(self.wall[i], 1., -1.)[wall_fluid_pair, None]*r[wall_fluid_pair] # relative position
+        pres_wall = pres[fluid_particle_index]*Ws + np.sum(self.accel*rwf, axis=1)*rho[fluid_particle_index]*Ws        
+                        # first order pressure extrapolation
+        sw  = accumulate_contribs(wall_particle_index, fluid_particle_index, Ws, np.zeros_like(Ws), n)
+        num = accumulate_contribs(wall_particle_index, fluid_particle_index, pres_wall, np.zeros_like(Ws), n)
+
+        valid_wall_particle = self.wall & (sw > 0)
+        pw = np.zeros(n)
+        # weighted average pressure
+        pw[valid_wall_particle] = num[valid_wall_particle]/sw[valid_wall_particle]
+
+        pres[self.wall] = pw[self.wall]
+        dens[self.wall] = self.rho0*np.maximum(1 + pw[self.wall]/self.B, 1e-3)**(1/self.gm)
+
+        if self.wall_density is not None:
+            rho_w = np.asarray(self.wall_density(x[self.wall]), dtype=float)
+            p_w = tait(self.B, self.rho0, 
+                        np.where(np.isfinite(rho_w), rho_w, self.rho0), self.gm)
+            dens[self.wall] = np.where(np.isfinite(rho_w), rho_w, dens[self.wall])
+            pres[self.wall] = np.where(np.isfinite(rho_w), p_w, pres[self.wall])
+        return pres, dens
+
+    def density_diffusion(self, dens, n, drho):
+        ff  = ~self.wall[i] & ~self.wall[j]
+        ref = self.rho_ref(x)
+        psi = (dens[i] - dens[j]) - (ref[i] - ref[j])
+        D   = (2*self.delta*self.h*self.c0*psi*np.sum(dW*r, axis=1)
+                / np.maximum(rn**2, 1e-30)*ff)
+
+        drho += accumulate_contribs(
+            i, j, self.mass/dens[j]*D, -self.mass/dens[i]*D, n)
+
+        return drho
+
     def equations(self, x, v, rho, t):
         n = len(rho)
-        wall = self.wall if self.wall is not None else np.zeros(n, dtype=bool)
+        # self.wall = self.self.wall if self.self.wall is not None else np.zeros(n, dtype=bool)
 
         i, j = self.neighbours(x)
         r = x[i] - x[j]
@@ -113,58 +150,30 @@ class SPHSolver:
 
         rn = np.linalg.norm(r, axis=1)
         W, dW = self.W(r), self.gradW(r)
-        pres, dens = tait(self.B, self.rho0, rho, self.gm), rho.copy()
 
-        # Adami-style wall pressure/density from fluid neighbours.
-        wf = wall[i] != wall[j]
-        iw = np.where(wall[i], i, j)[wf]
-        jf = np.where(wall[i], j, i)[wf]
-        rwf = np.where(wall[i], 1., -1.)[wf, None]*r[wf]
-        Ws = W[wf]
+        # equation of state: pres from rho
+        pres_0 = tait(self.B, self.rho0, rho, self.gm)
+        dens_0 = rho.copy()
 
-        sw = np.bincount(iw, Ws, n)
-        num = np.bincount(iw, pres[jf]*Ws, n) \
-              + np.bincount(iw, np.sum(self.accel*rwf, axis=1)*rho[jf]*Ws, n)
-        ok = wall & (sw > 0)
-        pw = np.zeros(n)
-        pw[ok] = num[ok]/sw[ok]
-
-        pres[wall] = pw[wall]
-        dens[wall] = self.rho0*np.maximum(1 + pw[wall]/self.B, 1e-3)**(1/self.gm)
-
-        if self.wall_density is not None:
-            rho_w = np.asarray(self.wall_density(x[wall]), dtype=float)
-            p_w = tait(self.B, self.rho0, 
-                        np.where(np.isfinite(rho_w), rho_w, self.rho0), self.gm)
-            dens[wall] = np.where(np.isfinite(rho_w), rho_w, dens[wall])
-            pres[wall] = np.where(np.isfinite(rho_w), p_w, pres[wall])
+        pres, dens = self.treat_walls(i, j, r, W, n, rho, pres_0, dens_0)
 
         veff = v
         if self.wall_noslip:
-            vw = np.stack(
-                [np.bincount(iw, v[jf, a]*Ws, n) for a in range(self.dim)],
-                axis=1,
-            )
+            vw = accumulate_contribs(wall_particle_index, fluid_particle_index, v[fluid_particle_index, :]*Ws[:, None], np.zeros_like(v[fluid_particle_index, :]), n)
             veff = v.copy()
-            veff[ok] = -vw[ok]/sw[ok, None]
+            veff[valid_wall_particle] = -vw[valid_wall_particle]/sw[valid_wall_particle, None]
 
-        # Continuity.
+        # Continuity eq.
         vij = v[i] - v[j]
         c = self.mass*np.sum(vij*dW, axis=1)
-        drho = scatter(i, j, c, c, n)
+        drho = accumulate_contribs(i, j, c, c, n)
 
-        # Delta-SPH density diffusion, optionally around a reference profile.
+
         if self.delta > 0:
-            ff = ~wall[i] & ~wall[j]
-            ref = self.rho_ref(x) if self.rho_ref is not None \
-                  else np.full(n, self.rho0)
-            psi = (dens[i] - dens[j]) - (ref[i] - ref[j])
-            D = (2*self.delta*self.h*self.c0*psi*np.sum(dW*r, axis=1)
-                 / np.maximum(rn**2, 1e-30)*ff)
-            drho += np.bincount(i, self.mass/dens[j]*D, n) \
-                    - np.bincount(j, self.mass/dens[i]*D, n)
-
-        # Momentum: pressure, artificial/laminar viscosity.
+            # Delta-SPH density diffusion, can be done depending on a ref. profile.
+            drho = self.density_diffusion(dens, n, drho)
+        
+        # Momentum equation
         vv = veff[i] - veff[j]
         Pi = 0.
         if self.viscosity == "artificial":
@@ -180,26 +189,27 @@ class SPHSolver:
                  / ((dens[i] + dens[j])*(rn**2 + 0.01*self.h**2)))
             f += K[:, None]*vv
 
-        acc = scatter(i, j, f, -f, n) + self.accel
-        acc[wall] = 0.
-        drho[wall] = 0.
+        acc = accumulate_contribs(i, j, f, -f, n) + self.accel
+        
+        # fixed walls
+        acc[self.wall] = 0.
+        drho[self.wall] = 0.
         return acc, drho
 
     def step(self, x, v, rho, dt, t=0.0):
         return self.stepper(self.equations, x, v, rho, dt, t)
 
-    def run(self, x, v, rho, wall=None, T=None, save_every=10):
+    def run(self, x, v, rho, save_every=10):
         x = np.asarray(x, dtype=float)
         v = np.asarray(v, dtype=float)
         rho = np.asarray(rho, dtype=float)
-        if wall is None:
-            wall = np.zeros(len(rho), dtype=bool)
+        if self.wall is None:
+            self.wall = np.zeros(len(rho), dtype=bool)
         else:
-            wall = np.asarray(wall, dtype=bool)
-        self.wall = wall
+            self.wall = np.asarray(self.wall, dtype=bool)
+        self.wall = self.wall
 
-        T = self.T if T is None else T
-        ns = int(np.ceil(T/self.dt))
+        ns = int(np.ceil(self.T/self.dt))
         saved = np.unique(np.append(np.arange(0, ns + 1, save_every), ns))
         to_save = set(saved.tolist())
 
@@ -213,4 +223,4 @@ class SPHSolver:
                 x, v, rho = self.step(x, v, rho, self.dt, n*self.dt)
 
         return dict(t=saved*self.dt, x=np.array(xs), v=np.array(vs), 
-                                rho=np.array(rs), wall=wall, dt=self.dt)
+                                rho=np.array(rs), dt=self.dt)
