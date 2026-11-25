@@ -1,7 +1,13 @@
+import sys
+from pathlib import Path
+import numpy as np
+
+PROJECT_ROOT = str(Path(__file__).resolve().parents[1])
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 from src.eqs import hydrostatic_density, hydrostatic_pressure, tait
 from src.particles import hydrostatic_column_1d
 from src.wcsph import SPHSolver
-import numpy as np
 
 dx, h = 0.02, 1.0
 n_wall = 4
