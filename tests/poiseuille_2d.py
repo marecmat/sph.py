@@ -25,7 +25,7 @@ layout = channel_2d(
     DX, H, LX, rho0=RHO0, n_wall=N_WALL, diamond=True,
 )
 solver = SPHSolver(
-    dim=2, dx=layout.dx, rho0=RHO0, gm=GM, c0=C0, g=0.0, body_force=F,
+    dim=2, dx=layout.dx, rho0=RHO0, gm=GM, c0=C0, accel=np.array([F, 0.0]),
     viscosity="laminar", nu_phys=NU, delta=0.0, wall_noslip=True,
     periodic_axes=(0,), L=layout.L, T=T,
 )

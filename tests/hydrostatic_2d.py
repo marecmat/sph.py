@@ -48,7 +48,8 @@ for row, (name, periodic, walls, h_factor) in enumerate(CASES):
         rho_ref = lambda x: hydrostatic_density(x[:, 1], H, RHO0, GM, C0, G)
         solver = SPHSolver(
             dim=2, dx=layout.dx, h_factor=h_factor, H=H,
-            rho0=RHO0, gm=GM, c0=C0, g=G, alpha=0.1, delta=0.1,
+            rho0=RHO0, gm=GM, c0=C0, accel=np.array([0., -G]),
+            alpha=0.1, delta=0.1,
             rho_ref=rho_ref, wall_density=top_ghost_density, T=T,
             periodic_axes=(0,) if periodic else (), L=layout.L,
         )

@@ -28,7 +28,8 @@ layout = dam_break_2d(
     fluid_width=0.4, fluid_height=0.5, diamond=True,
 )
 solver = SPHSolver(
-    dim=2, dx=layout.dx, H=H, rho0=RHO0, gm=GM, c0=C0, g=G,
+    dim=2, dx=layout.dx, H=H, rho0=RHO0, gm=GM, c0=C0,
+    accel=np.array([0., -G]),
     viscosity="artificial", alpha=0.1, delta=0.1, rho_ref=None,
     periodic_axes=(), L=layout.L, T=T,
 )

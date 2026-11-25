@@ -81,12 +81,12 @@ class SPHSolver:
         self.wall_density = wall_density
         self.wall_noslip = wall_noslip
 
-    def W(self):
-        rr = self.r[..., 0] if self.dim == 1 and self.r.ndim > 1 else self.r
+    def W(self, r):
+        rr = r[..., 0] if self.dim == 1 and r.ndim > 1 else r
         return self.kernel(rr, self.h, self.dim)
 
-    def gradW(self):
-        return self.kernel_gradient(self.r, self.h, self.dim)
+    def gradW(self, r):
+        return self.kernel_gradient(r, self.h, self.dim)
 
     def neighbours(self, x):
         boxsize = tuple(self.L[axis] if axis in self.periodic_axes 
@@ -168,48 +168,27 @@ class SPHSolver:
 
         # Continuity eq.
         vij = v[self.i] - v[self.j]
-<<<<<<< HEAD
         c = self.mass*np.sum(vij*self.dWij, axis=1)
         drho = accumulate_contribs(self.i, self.j, c, c, n)
 
         if self.delta > 0:
             # Delta-SPH density diffusion, can be done depending on a ref. profile.
             drho = self.density_diffusion(dens, drho)
-=======
-        c = self.mass*np.sum(vij*dW, axis=1)
-        drho = accumulate_contribs(self.i, self.j, c, c, n)
-
-
-        if self.delta > 0:
-            # Delta-SPH density diffusion, can be done depending on a ref. profile.
-            drho = self.density_diffusion(x, dens, n, rn, dW, drho)
->>>>>>> 3443ee4ae347d91213f60074ed775aecbf12e00a
         
         # Momentum equation
         vv = veff[self.i] - veff[self.j]
         Pi = 0.
         if self.viscosity == "artificial":
             vr = np.sum(vv*self.r, axis=1)
-<<<<<<< HEAD
             mu = self.h*vr/(self.rn**2 + 0.01*self.h**2)
-=======
-            mu = self.h*vr/(rn**2 + 0.01*self.h**2)
->>>>>>> 3443ee4ae347d91213f60074ed775aecbf12e00a
             Pi = np.where(vr < 0,
                 -self.alpha*self.c0*mu/(0.5*(dens[self.i] + dens[self.j])), 0.
             )
 
-<<<<<<< HEAD
         f = -(self.mass*(pres[self.i]/dens[self.i]**2 + pres[self.j]/dens[self.j]**2 + Pi))[:, None]*self.dWij
         if self.viscosity == "laminar":
             K = (self.mass*4*self.nu_phys*np.sum(self.r*self.dWij, axis=1)
                  / ((dens[self.i] + dens[self.j])*(self.rn**2 + 0.01*self.h**2)))
-=======
-        f = -(self.mass*(pres[self.i]/dens[self.i]**2 + pres[self.j]/dens[self.j]**2 + Pi))[:, None]*dW
-        if self.viscosity == "laminar":
-            K = (self.mass*4*self.nu_phys*np.sum(self.r*dW, axis=1)
-                 / ((dens[self.i] + dens[self.j])*(rn**2 + 0.01*self.h**2)))
->>>>>>> 3443ee4ae347d91213f60074ed775aecbf12e00a
             f += K[:, None]*vv
 
         acc = accumulate_contribs(self.i, self.j, f, -f, n) + self.accel

@@ -11,12 +11,7 @@ import numpy as np
 
 dx = 0.08
 h = 1.0
-<<<<<<< HEAD
 t = 8
-=======
-t = 3
-n_wall = 4
->>>>>>> 3443ee4ae347d91213f60074ed775aecbf12e00a
 rho0 = 1000.0
 gm = 7.0
 g = 9.81 
