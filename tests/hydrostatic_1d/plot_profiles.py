@@ -11,7 +11,7 @@ from src.utils import load
 
 
 if __name__ == "__main__":
-    starts = ("uniform", "hydrostatic")
+    starts = ("hydrostatic_tait", "uniform", "hydrostatic")
     data = {start: load(f"data_{start}.npz") for start in starts}
     first = data[starts[0]]
     h, rho0, gm = float(first["h"]), float(first["rho0"]), float(first["gm"])

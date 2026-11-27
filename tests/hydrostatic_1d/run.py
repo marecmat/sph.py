@@ -10,8 +10,8 @@ from src.particles import hydrostatic_column_1d
 from src.wcsph import SPHSolver
 from src.utils import save_data
 
-dx = 0.04
-t  = 25
+dx = 0.02
+t  = 15
 h  = 1.0
 rho0, gm, g, drho_max = 1000.0, 7.0, 9.81, 0.01
 c0 = np.sqrt(g*h/drho_max)
@@ -24,12 +24,12 @@ def top_ghost_density(xw): #Exact Tait density on top ghosts; leave bottom walls
 
 
 def run(start):
-    case = hydrostatic_column_1d(dx, h, rho0=rho0, gm=gm, c0=c0, g=g, start=start, n_wall=4)
+    case = hydrostatic_column_1d(dx, h, rho0=rho0, gm=gm, c0=c0, g=g, start='hydrostatic_tait', n_wall=4)
     rho_ref = lambda x: hydrostatic_density(x[:, 0], h, rho0, gm, c0, g)
     
     solver = SPHSolver(
         dim=1, dx=case.dx, H=h, rho0=rho0, gm=gm, c0=c0, 
-        h_factor=2., alpha=.01, delta=0.01, rho_ref=rho_ref,
+        h_factor=2., alpha=0.01, delta=0.01, rho_ref=rho_ref,
         accel=np.array([-g]), wall_density=top_ghost_density, T=t, periodic_axes=(),
     )
     
@@ -41,7 +41,7 @@ def run(start):
     err = np.abs(p - hydrostatic_pressure(y, h, rho0, gm, c0, g))/(rho0*g*h)
     bottom = err[y < 0.05*h]
     ke = 0.5*solver.mass*np.sum(out["v"][:, fluid]**2, axis=(1, 2))
-
+    
     return {
         "t": out["t"], "x": out["x"], "v": out["v"], "rho": out["rho"], "fluid": fluid, "h": h,
         "B": solver.B, "mass": solver.mass, "dx": solver.dx, "dt": solver.dt, "steps": solver.n_steps, "starts": np.array(starts), 
@@ -51,6 +51,8 @@ def run(start):
 
 
 if __name__ == "__main__":
-    for start in starts:
-        data = run(start)
-        save_data(f"data_{start}", data)
+    # for start in starts:
+    #     data = run(start)
+    #     save_data(f"data_{start}", data)
+    data = run("hydrostatic_tait")
+    save_data(f"data_hydrostatic_tait", data)

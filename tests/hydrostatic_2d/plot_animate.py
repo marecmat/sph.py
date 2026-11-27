@@ -26,7 +26,7 @@ if __name__ == "__main__":
                     d["rho"][k][fluid], float(d["gm"]))/1e3
 
     pmax = max(pressure(d, -1, d["fluid"]).max() for d in data.values())
-    fig, axes = plt.subplots(2, 2, figsize=(9, 8), layout="constrained")
+    fig, axes = plt.subplots(1, 4, figsize=(9, 4), layout="constrained")
     scatters = {}
     for ax, key in zip(axes.flat, keys):
         d = data[key]
@@ -50,5 +50,5 @@ if __name__ == "__main__":
         title.set_text(f"t = {data[keys[0]]['t'][k]:.2f}")
         return [*scatters.values(), title]
 
-    anim = FuncAnimation(fig, update, frames=n_frames, interval=100)
+    anim = FuncAnimation(fig, update, frames=n_frames, interval=15)
     plt.show()

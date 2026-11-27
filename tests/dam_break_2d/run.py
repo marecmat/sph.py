@@ -11,23 +11,25 @@ from src.particles import dam_break_2d
 from src.wcsph import SPHSolver
 from src.utils import save_data
 
-DX, H, LX = 1.0/30.0, 1.0, 2.0
-N_WALL = 3
-FLUID_WIDTH, FLUID_HEIGHT = 0.4, 0.5
-RHO0, GM, G, DRHO_MAX = 1000.0, 7.0, 9.81, 0.01
-C0 = np.sqrt(G*H/DRHO_MAX)
-T = 5
+dx = 0.01
+h = 1.0
+lx = 2.0
+n_wall = 3
+fluid_width, fluid_height = 0.4, 0.5
+rho0, gm, g, drho_max = 1000.0, 7.0, 9.81, 0.01
+C0 = np.sqrt(g*h/drho_max)
+T = 10
 N_SNAPSHOTS = 200
 
 
 def run_case():
     layout = dam_break_2d(
-        DX, H, LX, rho0=RHO0, n_wall=N_WALL,
-        fluid_width=FLUID_WIDTH, fluid_height=FLUID_HEIGHT, diamond=True,
+        dx, h, lx, rho0=rho0, n_wall=n_wall,
+        fluid_width=fluid_width, fluid_height=fluid_height, diamond=True,
     )
     solver = SPHSolver(
-        dim=2, dx=layout.dx, H=H, rho0=RHO0, gm=GM, c0=C0,
-        accel=np.array([0., -G]), viscosity="artificial",
+        dim=2, dx=layout.dx, H=h, rho0=rho0, gm=gm, c0=C0,
+        accel=np.array([0., -g]), viscosity="artificial",
         alpha=0.1, delta=0.1, rho_ref=None,
         periodic_axes=(), L=layout.L, T=T,
     )

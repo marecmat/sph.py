@@ -1,7 +1,7 @@
 import numpy as np
 
-CUBIC_FACTORS = [ 2./3., 10./(7.*np.pi), 1./np.pi ]
-WENDLAND_FACTORS = [ 3./4., 7./(4.*np.pi), 21./(16.*np.pi) ]
+cubic_factors = [ 2./3., 10./(7.*np.pi), 1./np.pi ]
+wendland_factors = [ 3./4., 7./(4.*np.pi), 21./(16.*np.pi) ]
 
 def _factor(h, dim, factors):
     if dim not in (1, 2, 3):
@@ -20,27 +20,27 @@ def _gradient(r, h, dim, dw, factor):
     return (factor / h) * dw[..., None] * direction
 
 def cubic_spline(r, h, dim):
-    factor = _factor(h, dim, CUBIC_FACTORS)
+    factor = _factor(h, dim, cubic_factors)
     q = _q(r, h, dim)
     f = np.where( q < 1., 1. - 1.5*q**2 + 0.75*q**3,
         np.where( q < 2., 0.25*(2. - q)**3, 0.))
     return factor * f
 
 def cubic_spline_gradient(r, h, dim):
-    factor = _factor(h, dim, CUBIC_FACTORS)
+    factor = _factor(h, dim, cubic_factors)
     q = _q(r, h, dim)
     dw = np.where( q < 1., -3.*q + 2.25*q**2,
-        np.where( q < 2., -0.75*(2. - q)**2, 0.))
+         np.where( q < 2., -0.75*(2. - q)**2, 0.))
     return _gradient(r, h, dim, dw, factor)
 
 def wendland(r, h, dim):
-    factor = _factor(h, dim, WENDLAND_FACTORS)
+    factor = _factor(h, dim, wendland_factors)
     q = _q(r, h, dim)
     f = np.where( q < 2., (1. - 0.5*q)**4 * (2.*q + 1.), 0.)
     return factor * f
 
 def wendland_gradient(r, h, dim):
-    factor = _factor(h, dim, WENDLAND_FACTORS)
+    factor = _factor(h, dim, wendland_factors)
     q = _q(r, h, dim)
     dw = np.where( q < 2., -5.*q*(1. - 0.5*q)**3, 0.)
     return _gradient(r, h, dim, dw, factor)

@@ -4,16 +4,16 @@ from .eqs import hydrostatic_constants, hydrostatic_density
 
 @dataclass
 class Layout:
+    # Initialisation data for all runs
     x: np.ndarray    # (n, dim)
     v: np.ndarray    # (n, dim)
     rho: np.ndarray  # (n,)
     wall: np.ndarray # (n,) bool
-    dx: float        # effective spacing used by the solver
-    L: tuple = ()    # domain length per axis, None if unused
+    dx: float        # spacing
+    L: tuple = ()    # domain length / axis
 
 
 def counts(dx, H, Lx=None):
-    """Derive integer counts and the effective spacing from a target ``dx``."""
     N = max(1, int(round(H/dx)))
     dy = H/N
     if Lx is None:

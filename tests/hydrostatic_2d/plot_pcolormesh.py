@@ -10,7 +10,6 @@ for path in (str(ROOT), str(TESTS)):
 import numpy as np
 import matplotlib.pyplot as plt
 
-from common import finish
 from src.eqs import tait
 from src.utils import load
 
@@ -32,4 +31,4 @@ if __name__ == "__main__":
             fig.colorbar(m, ax=ax, label="p (kPa)")
             ax.set(title=f"{case} / {start}", xlabel="x", ylabel="y",
                    aspect="equal")
-    finish(fig, "hydrostatic_2d_pcolormesh.png")
+    plt.show()

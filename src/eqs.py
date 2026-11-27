@@ -21,7 +21,7 @@ def accumulate_contribs(i, j, a, b, n):
         return np.stack([   
                         np.bincount(i, a[:, k], n) + \
                         np.bincount(j, b[:, k], n) 
-                    for k in range(a.shape[1]) #it over each spatial component
+                    for k in range(a.shape[1]) #iteration over each spatial component
                 ], axis=1,)
 
 def tait(B, rho0, rho, gm):

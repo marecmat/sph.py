@@ -16,7 +16,7 @@ DX, H, LX = 0.025, 1.0, 0.2
 N_WALL = 4
 RHO0, GM, G, DRHO_MAX = 1000.0, 7.0, 9.81, 0.01
 C0 = np.sqrt(G*H/DRHO_MAX)
-T = 0.4
+T = 5
 N_SNAPSHOTS = 200
 
 CASES = (
